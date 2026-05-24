@@ -1,0 +1,18 @@
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Deps
+node_modules/
+
+# Prisma client output
+generated/prisma/
+
+# Env
+.env
+.env.local
+
+# Logs / coverage
+*.log
+coverage/

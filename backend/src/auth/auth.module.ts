@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma.module';
+import { OptionalAuthGuard } from '../common/guards/optional-auth.guard';
 import { AdminBootstrapService } from './admin-bootstrap.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -21,6 +22,7 @@ import { SessionService } from './session.service';
     SessionAuthGuard,
     CsrfGuard,
     RolesGuard,
+    OptionalAuthGuard,
     AdminBootstrapService,
   ],
   exports: [
@@ -29,6 +31,7 @@ import { SessionService } from './session.service';
     SessionAuthGuard,
     CsrfGuard,
     RolesGuard,
+    OptionalAuthGuard,
   ],
 })
 export class AuthModule {}

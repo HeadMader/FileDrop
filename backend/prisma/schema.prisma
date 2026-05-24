@@ -48,39 +48,48 @@ model Session {
 }
 
 model Upload {
-  id            String    @id @default(uuid())
-  slug          String    @unique
-  fileName      String
-  mimeType      String
-  fileSize      BigInt
-  checksum      String
-  storageKey    String
-  passwordHash  String?
-  downloadLimit Int?
-  downloadCount Int       @default(0)
-  expiresAt     DateTime
-  deletedAt     DateTime?
+  id String @id @default(uuid())
 
-  userId    String?
-  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   anonToken String?
 
-  downloadLogs DownloadLog[]
+  fileName   String
+  mimeType   String?
+  fileSize   Int
+  storageKey String  @unique
+  checksum   String?
+
+  slug String @unique
+
+  passwordHash  String?
+  downloadLimit Int?
+  downloadCount Int     @default(0)
+
+  expiresAt DateTime
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  downloads DownloadLog[]
+
   @@index([userId])
+  @@index([slug])
   @@index([anonToken])
   @@index([expiresAt])
 }
 
 model DownloadLog {
-  id        String   @id @default(uuid())
-  uploadId  String
-  upload    Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid())
+
+  uploadId String
+  upload   Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
   ip        String?
   userAgent String?
+
   createdAt DateTime @default(now())
 
   @@index([uploadId])

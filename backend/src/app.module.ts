@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { SwaggerSyncModule } from 'nestjs-swagger-sync';
+import { DocsController } from './docs.controller';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { CleanupModule } from './cleanup/cleanup.module';
@@ -19,6 +21,14 @@ import { UploadsModule } from './uploads/uploads.module';
     ThrottlerModule.forRoot([
       { name: 'default', ttl: 60_000, limit: 60 },
     ]),
+    SwaggerSyncModule.register({
+      apiKey: process.env.POSTMAN_API_KEY || '',
+      swaggerPath: 'api/docs',
+      baseUrl: process.env.SWAGGER_BASE_URL || 'http://localhost:3000',
+      collectionName: 'FileDrop API',
+      runTest: false,
+      ignorePathWithBearerToken: [],
+    }),
     PrismaModule,
     MailModule,
     StorageModule,
@@ -29,5 +39,6 @@ import { UploadsModule } from './uploads/uploads.module';
     PasswordResetModule,
     CleanupModule,
   ],
+  controllers: [DocsController],
 })
 export class AppModule {}

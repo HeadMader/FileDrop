@@ -79,6 +79,10 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1",
+      "^nanoid$": "<rootDir>/__mocks__/nanoid.ts"
+    },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

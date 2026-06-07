@@ -37,8 +37,7 @@ export class AdminService {
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
     const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000);
-    thirtyDaysAgo.setHours(0, 0, 0, 0);
+    const thirtyDaysAgo = new Date(startOfToday.getTime() - 29 * 86_400_000);
 
     const [
       totalFiles,
@@ -134,6 +133,8 @@ export class AdminService {
 
   async health() {
     const now = new Date();
+    const uptimeSeconds = Math.floor(process.uptime());
+    const poolStats = this.prisma.poolStats();
     const [cleanupQueueSize, storageAgg] = await Promise.all([
       this.prisma.upload.count({
         where: { deletedAt: null, expiresAt: { lte: now } },
@@ -149,10 +150,14 @@ export class AdminService {
     );
     return {
       status: 'ok',
-      uptimeSeconds: Math.floor(process.uptime()),
+      uptime: this.formatDuration(uptimeSeconds),
+      uptimeSeconds,
+      uploadLatencyP95Ms: 0,
       cleanupQueueSize,
       storageUsedBytes: storageAgg._sum.fileSize ?? 0,
       storageTotalBytes: totalGb,
+      dbConnectionPoolSize: poolStats.max,
+      dbActiveConnections: poolStats.active,
     };
   }
 
@@ -340,6 +345,18 @@ export class AdminService {
       return `"${value.replace(/"/g, '""')}"`;
     }
     return value;
+  }
+
+  private formatDuration(totalSeconds: number): string {
+    const days = Math.floor(totalSeconds / 86_400);
+    const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+    const minutes = Math.floor((totalSeconds % 3_600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
   }
 
   private fillDays(

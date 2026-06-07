@@ -32,4 +32,7 @@ services:
       - "${RUSTFS_API_PORT:-9000}:9000"
       - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ./.data/rustfs:/data
+      - rustfs_data:/data
+
+volumes:
+  rustfs_data:

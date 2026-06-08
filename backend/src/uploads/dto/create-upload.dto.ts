@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export const EXPIRES_IN_VALUES = [
@@ -35,6 +36,7 @@ export class CreateUploadDto {
   expiresIn!: ExpiresIn;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(1000)

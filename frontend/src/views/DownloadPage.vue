@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { FileMetadata } from '@filedrop/shared';
 import { uploadsApi } from '@/api/uploads.api';
 import { useToastStore } from '@/stores/toast.store';
-import { useCountdown } from '@/composables/useUtils';
-import { formatBytes, formatDate } from '@/utils/format';
+import { useCountdown, useClipboard } from '@/composables/useUtils';
+import { formatBytes, formatDate, formatCountdown } from '@/utils/format';
 import Card from '@/components/ui/Card.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
@@ -18,25 +18,43 @@ import Spinner from '@/components/ui/Spinner.vue';
 const route = useRoute();
 const router = useRouter();
 const toast = useToastStore();
+const { copy } = useClipboard();
 
 const slug = route.params.slug as string;
 const meta = ref<FileMetadata | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
+const loadError = ref<string | null>(null);
 const password = ref('');
 const verifying = ref(false);
 const downloadToken = ref<string | null>(null);
 const pwdError = ref<string | null>(null);
 
+const host = typeof window !== 'undefined' ? window.location.host : '';
 const countdown = useCountdown(() => meta.value?.expiresAt ?? null);
+
+const passwordRequired = computed(() => !!meta.value?.hasPassword && !downloadToken.value);
+const downloadsLeft = computed(() =>
+  meta.value?.downloadLimit ? meta.value.downloadLimit - meta.value.downloadCount : null,
+);
+const metaExpired = computed(() =>
+  meta.value ? formatCountdown(meta.value.expiresAt).expired : false,
+);
+const unavailableReason = computed(() =>
+  metaExpired.value ? 'The retention window has expired.' : 'The download limit has been reached.',
+);
 
 onMounted(async () => {
   try {
     meta.value = await uploadsApi.getMeta(slug);
   } catch (e) {
     const status = (e as { status?: number }).status;
-    if (status === 404) notFound.value = true;
-    else toast.push({ type: 'error', message: (e as Error).message });
+    if (status === 404) {
+      notFound.value = true;
+    } else {
+      loadError.value = (e as Error).message || 'Could not load this file.';
+      toast.push({ type: 'error', message: loadError.value });
+    }
   } finally {
     loading.value = false;
   }
@@ -50,6 +68,7 @@ async function verifyPassword() {
     const res = await uploadsApi.verifyPassword(slug, { password: password.value });
     if (res.valid && res.downloadToken) {
       downloadToken.value = res.downloadToken;
+      toast.push({ type: 'success', message: 'Password accepted' });
     } else {
       pwdError.value = 'Incorrect password';
     }
@@ -62,99 +81,219 @@ async function verifyPassword() {
 
 function startDownload() {
   if (!meta.value) return;
+  toast.push({ type: 'success', message: 'Download started' });
   window.location.href = uploadsApi.downloadUrl(meta.value.slug, downloadToken.value ?? undefined);
+}
+
+function copyLink() {
+  copy(`${window.location.origin}/s/${slug}`);
+  toast.push({ type: 'success', message: 'Link copied to clipboard' });
 }
 </script>
 
 <template>
-  <div class="container container-narrow" style="padding: 48px 24px">
-    <div v-if="loading" style="display: flex; justify-content: center; padding: 48px">
-      <Spinner :size="32" />
-    </div>
+  <div class="download-page">
+    <!-- This wrapper MUST be the only root node: App.vue wraps views in
+         <transition mode="out-in">, which needs a single root element. A sibling
+         node at the root (even a comment) wedges the fade and blanks the view. -->
+    <!-- Loading -->
+    <div v-if="loading" class="container container-narrow" style="padding: 80px 24px">
+    <Card pad="none" style="text-align: center; padding: 64px 24px">
+      <div style="display: flex; justify-content: center"><Spinner :size="28" /></div>
+      <div class="subtle mono" style="margin-top: 16px; font-size: 12px">GET /api/uploads/{{ slug }}</div>
+    </Card>
+  </div>
 
-    <Card v-else-if="notFound" pad="lg">
-      <div style="text-align: center; padding: 24px 0">
-        <Icon name="x" :size="22" style="color: var(--danger); margin-bottom: 8px" />
-        <h2 class="h3" style="margin: 0 0 4px">File not found</h2>
-        <p class="muted" style="font-size: 13px">
-          The link is invalid, or the file has been deleted.
-        </p>
-        <Button variant="secondary" style="margin-top: 16px" @click="router.push('/')">
-          Back home
-        </Button>
+  <!-- Not found -->
+  <div v-else-if="notFound" class="container container-narrow" style="padding: 80px 24px">
+    <Card pad="lg" style="text-align: center">
+      <div
+        style="display: inline-flex; padding: 14px; background: var(--bg-muted); border-radius: 50%; color: var(--text-muted)"
+      >
+        <Icon name="file" :size="28" />
+      </div>
+      <h2 class="h3" style="margin-top: 16px">File not found</h2>
+      <p class="muted" style="margin-top: 8px; font-size: 14px">
+        This link may be invalid or the file may have been deleted.
+      </p>
+      <div class="row" style="justify-content: center; gap: 8px; margin-top: 20px">
+        <Button variant="primary" @click="router.push('/')">Upload a file</Button>
+        <Button variant="ghost" @click="router.push('/')">Go home</Button>
+      </div>
+      <div class="mono subtle" style="margin-top: 24px; font-size: 11px">404 · /s/{{ slug }}</div>
+    </Card>
+  </div>
+
+  <!-- Unavailable (expired / limit reached) -->
+  <div v-else-if="meta && !meta.isAvailable" class="container container-narrow" style="padding: 80px 24px">
+    <Card pad="lg" style="text-align: center">
+      <div
+        style="display: inline-flex; padding: 14px; background: var(--warning-soft); color: var(--warning); border-radius: 50%"
+      >
+        <Icon name="clock" :size="28" />
+      </div>
+      <h2 class="h3" style="margin-top: 16px">This file is no longer available</h2>
+      <p class="muted" style="margin-top: 8px; font-size: 14px">{{ unavailableReason }}</p>
+      <div class="row" style="justify-content: center; gap: 6px; margin-top: 16px">
+        <Badge tone="warning" dot>{{ metaExpired ? 'expired' : 'limit reached' }}</Badge>
+        <Badge mono outline>/s/{{ slug }}</Badge>
+      </div>
+      <div class="row" style="justify-content: center; gap: 8px; margin-top: 20px">
+        <Button variant="primary" @click="router.push('/')">Upload your own</Button>
       </div>
     </Card>
+  </div>
 
-    <Card v-else-if="meta && !meta.isAvailable" pad="lg">
-      <div style="text-align: center; padding: 24px 0">
-        <Icon name="clock" :size="22" style="color: var(--warning); margin-bottom: 8px" />
-        <h2 class="h3" style="margin: 0 0 4px">File unavailable</h2>
-        <p class="muted" style="font-size: 13px">
-          This file has expired or reached its download limit.
-        </p>
-        <Button variant="secondary" style="margin-top: 16px" @click="router.push('/')">
-          Upload your own
-        </Button>
+  <!-- Available -->
+  <div v-else-if="meta" class="container container-narrow" style="padding: 48px 24px">
+    <div class="stack-lg">
+      <div class="row mono subtle" style="gap: 8px; font-size: 12px">
+        <Icon name="globe" :size="12" />
+        <span>{{ host }}/s/{{ slug }}</span>
       </div>
-    </Card>
 
-    <Card v-else-if="meta" pad="lg">
-      <div class="stack-lg">
-        <div class="row" style="gap: 14px; align-items: flex-start">
-          <div
-            style="width: 44px; height: 44px; border-radius: var(--r-md); background: var(--bg-muted); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border)"
-          >
-            <FileTypeIcon :mime-type="meta.mimeType" :size="20" />
-          </div>
-          <div style="flex: 1; min-width: 0">
-            <div style="font-weight: 600; font-size: 15px; word-break: break-word">{{ meta.fileName }}</div>
-            <div class="muted" style="font-size: 13px; margin-top: 2px">
-              {{ formatBytes(meta.fileSize) }} · uploaded {{ formatDate(meta.createdAt) }}
+      <Card pad="lg">
+        <div class="stack-lg">
+          <!-- file header -->
+          <div class="row" style="gap: 16px; align-items: flex-start">
+            <div
+              style="
+                flex: 0 0 auto;
+                width: 56px;
+                height: 56px;
+                border-radius: var(--r-md);
+                background: var(--bg-muted);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--border);
+              "
+            >
+              <FileTypeIcon :mime-type="meta.mimeType" :size="28" />
+            </div>
+            <div style="flex: 1; min-width: 0">
+              <div class="row" style="gap: 8px; margin-bottom: 4px">
+                <span class="eyebrow">filedrop / shared file</span>
+                <Badge v-if="meta.hasPassword" tone="warning" dot style="height: 18px; font-size: 10px">encrypted</Badge>
+              </div>
+              <h2 class="h3 mono" style="word-break: break-word; line-height: 1.35">{{ meta.fileName }}</h2>
+              <div class="row subtle" style="margin-top: 6px; gap: 14px; font-size: 13px; flex-wrap: wrap">
+                <span class="mono">{{ formatBytes(meta.fileSize) }}</span>
+                <span class="mono">·</span>
+                <span class="mono">{{ meta.mimeType || 'application/octet-stream' }}</span>
+                <span class="mono">·</span>
+                <span>uploaded {{ formatDate(meta.createdAt) }}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="row" style="gap: 6px; flex-wrap: wrap">
-          <Badge tone="success" dot>Available</Badge>
-          <Badge mono outline>
-            <Icon name="clock" :size="10" /> {{ countdown.text }}
-          </Badge>
-          <Badge v-if="meta.downloadLimit != null" mono outline>
-            {{ meta.downloadCount }} / {{ meta.downloadLimit }} downloads
-          </Badge>
-          <Badge v-if="meta.hasPassword" mono outline>
-            <Icon name="lock" :size="10" /> Password
-          </Badge>
-        </div>
+          <!-- stats grid -->
+          <div class="grid-3">
+            <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md)">
+              <div class="subtle" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em">Expires in</div>
+              <div
+                class="mono"
+                :style="{ fontSize: '18px', marginTop: '4px', color: countdown.expired ? 'var(--danger)' : 'var(--text)' }"
+              >
+                {{ countdown.text }}
+              </div>
+            </div>
+            <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md)">
+              <div class="subtle" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em">Downloads</div>
+              <div class="mono" style="font-size: 18px; margin-top: 4px">
+                {{ meta.downloadCount }}
+                <span v-if="meta.downloadLimit" class="subtle"> / {{ meta.downloadLimit }}</span>
+                <span v-else class="subtle" style="font-size: 12px"> · unlimited</span>
+              </div>
+            </div>
+            <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md)">
+              <div class="subtle" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em">Status</div>
+              <div style="margin-top: 6px"><Badge tone="success" dot>available</Badge></div>
+            </div>
+          </div>
 
-        <div v-if="meta.hasPassword && !downloadToken" class="stack-lg">
-          <Field label="Enter password to continue" :error="pwdError ?? undefined">
-            <Input
-              v-model="password"
-              type="password"
-              placeholder="Password"
-              @keydown.enter="verifyPassword"
-            />
-          </Field>
-          <Button
-            variant="primary"
-            :block="true"
-            :disabled="verifying || password.length < 4"
-            @click="verifyPassword"
+          <!-- password gate OR download -->
+          <div
+            v-if="passwordRequired"
+            style="padding: 16px; background: var(--bg-subtle); border-radius: var(--r-md); border: 1px solid var(--border)"
           >
-            <template #icon><Icon name="unlock" :size="14" /></template>
-            {{ verifying ? 'Verifying…' : 'Unlock' }}
-          </Button>
-        </div>
-        <Button v-else variant="primary" :block="true" @click="startDownload">
-          <template #icon><Icon name="download" :size="14" /></template>
-          Download
-        </Button>
+            <div class="row" style="gap: 8px; margin-bottom: 10px">
+              <Icon name="lock" :size="14" style="color: var(--warning)" />
+              <div style="font-size: 13px; font-weight: 500">This file is password-protected</div>
+            </div>
+            <Field :error="pwdError ?? undefined">
+              <div class="row" style="gap: 8px">
+                <Input
+                  v-model="password"
+                  type="password"
+                  placeholder="Enter password"
+                  autofocus
+                  style="flex: 1"
+                  @keydown.enter="verifyPassword"
+                />
+                <Button variant="primary" :disabled="verifying || password.length < 4" @click="verifyPassword">
+                  <template #icon><Icon name="unlock" :size="14" /></template>
+                  {{ verifying ? 'Verifying…' : 'Unlock' }}
+                </Button>
+              </div>
+            </Field>
+          </div>
+          <div v-else class="row" style="gap: 8px; flex-wrap: wrap">
+            <Button
+              variant="primary"
+              size="lg"
+              :disabled="countdown.expired || (downloadsLeft != null && downloadsLeft <= 0)"
+              style="flex: 1; min-width: 220px"
+              @click="startDownload"
+            >
+              <template #icon><Icon name="download" :size="16" /></template>
+              Download {{ formatBytes(meta.fileSize) }}
+            </Button>
+            <Button variant="secondary" @click="copyLink">
+              <template #icon><Icon name="link" :size="14" /></template>
+              Copy link
+            </Button>
+          </div>
 
-        <p class="muted" style="font-size: 12px; text-align: center; margin: 0">
-          Files self-destruct on expiry. Be careful sharing executables you don't trust.
-        </p>
+          <!-- security footer -->
+          <div
+            class="row-between subtle"
+            style="font-size: 12px; padding-top: 8px; border-top: 1px solid var(--border)"
+          >
+            <div class="row" style="gap: 8px">
+              <Icon name="shield" :size="12" />
+              <span>Scanned for malware · transferred over TLS</span>
+            </div>
+            <div class="mono">slug: {{ slug }}</div>
+          </div>
+        </div>
+      </Card>
+
+      <div class="row-between subtle" style="font-size: 12px">
+        <span>Need to share something yourself?</span>
+        <a href="/" class="link" @click.prevent="router.push('/')">Upload a file →</a>
       </div>
+    </div>
+  </div>
+
+  <!-- Fallback: load error / unexpected state — never render a blank page -->
+  <div v-else class="container container-narrow" style="padding: 80px 24px">
+    <Card pad="lg" style="text-align: center">
+      <div
+        style="display: inline-flex; padding: 14px; background: var(--danger-soft); color: var(--danger); border-radius: 50%"
+      >
+        <Icon name="x" :size="28" />
+      </div>
+      <h2 class="h3" style="margin-top: 16px">Couldn’t load this file</h2>
+      <p class="muted" style="margin-top: 8px; font-size: 14px">
+        {{ loadError || 'Something went wrong. Please try again.' }}
+      </p>
+      <div class="row" style="justify-content: center; gap: 8px; margin-top: 20px">
+        <Button variant="primary" @click="router.go(0)">Retry</Button>
+        <Button variant="ghost" @click="router.push('/')">Go home</Button>
+      </div>
+      <div class="mono subtle" style="margin-top: 24px; font-size: 11px">/s/{{ slug }}</div>
     </Card>
+  </div>
   </div>
 </template>

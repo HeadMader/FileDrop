@@ -34,8 +34,11 @@ export class AdminService {
 
   async stats() {
     const now = new Date();
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
+    // Anchor day buckets to UTC so "today" is always included and the keys
+    // line up with the UTC-bucketed SQL below (server TZ-independent).
+    const startOfToday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
     const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
     const thirtyDaysAgo = new Date(startOfToday.getTime() - 29 * 86_400_000);
 
@@ -95,7 +98,7 @@ export class AdminService {
         where: { createdAt: { gte: startOfYesterday, lt: startOfToday } },
       }),
       this.prisma.$queryRaw<{ date: string; count: bigint }[]>`
-        SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS date,
+        SELECT to_char(date_trunc('day', "createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
                COUNT(*)::bigint AS count
         FROM "Upload"
         WHERE "createdAt" >= ${thirtyDaysAgo}
@@ -103,7 +106,7 @@ export class AdminService {
         ORDER BY date ASC
       `,
       this.prisma.$queryRaw<{ date: string; count: bigint }[]>`
-        SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS date,
+        SELECT to_char(date_trunc('day', "createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
                COUNT(*)::bigint AS count
         FROM "DownloadLog"
         WHERE "createdAt" >= ${thirtyDaysAgo}
@@ -367,10 +370,15 @@ export class AdminService {
     const map = new Map<string, number>(
       rows.map((r) => [r.date, Number(r.count)]),
     );
+    // Walk UTC midnights so keys match the UTC-bucketed SQL dates exactly.
+    const start = Date.UTC(
+      since.getUTCFullYear(),
+      since.getUTCMonth(),
+      since.getUTCDate(),
+    );
     const result: DailyRow[] = [];
     for (let i = 0; i < days; i++) {
-      const d = new Date(since.getTime() + i * 86_400_000);
-      const key = d.toISOString().slice(0, 10);
+      const key = new Date(start + i * 86_400_000).toISOString().slice(0, 10);
       result.push({ date: key, count: map.get(key) ?? 0 });
     }
     return result;

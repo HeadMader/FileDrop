@@ -237,8 +237,14 @@ export class DashboardService {
   async stats(userId: string, period: Period) {
     const now = new Date();
     const days = period === '30d' ? 30 : period === '90d' ? 90 : 7;
-    const since = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
-    since.setHours(0, 0, 0, 0);
+    // Anchor the window to UTC midnight so today's bucket is always included
+    // and the keys align with the UTC-bucketed SQL below (TZ-independent).
+    const startOfTodayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const since = new Date(
+      startOfTodayUtc.getTime() - (days - 1) * 24 * 60 * 60 * 1000,
+    );
 
     const [uploads, active, expired, downloadsAgg, downloadsPerDayRaw] =
       await Promise.all([
@@ -274,7 +280,7 @@ export class DashboardService {
           _sum: { downloadCount: true, fileSize: true },
         }),
         this.prisma.$queryRaw<{ date: string; count: bigint }[]>`
-          SELECT to_char(date_trunc('day', d."createdAt"), 'YYYY-MM-DD') AS date,
+          SELECT to_char(date_trunc('day', d."createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
                  COUNT(*)::bigint AS count
           FROM "DownloadLog" d
           JOIN "Upload" u ON u.id = d."uploadId"
@@ -308,10 +314,16 @@ export class DashboardService {
     const map = new Map<string, number>(
       rows.map((r) => [r.date, Number(r.count)]),
     );
+    const start = Date.UTC(
+      since.getUTCFullYear(),
+      since.getUTCMonth(),
+      since.getUTCDate(),
+    );
     const result: { date: string; count: number }[] = [];
     for (let i = 0; i < days; i++) {
-      const d = new Date(since.getTime() + i * 24 * 60 * 60 * 1000);
-      const key = d.toISOString().slice(0, 10);
+      const key = new Date(start + i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
       result.push({ date: key, count: map.get(key) ?? 0 });
     }
     return result;

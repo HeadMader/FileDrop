@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 110" width="380" height="110" role="img" aria-label="Mega">
+  <style>
+    .word { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-weight: 800; font-size: 64px; fill: #1e293b; }
+    @media (prefers-color-scheme: dark) {
+      .word { fill: #f8fafc; }
+    }
+  </style>
+  <!-- three orange slashes -->
+  <g fill="#f97316">
+    <polygon points="20,82 32,82 60,28 48,28" />
+    <polygon points="48,82 60,82 88,28 76,28" />
+    <polygon points="76,82 88,82 116,28 104,28" />
+  </g>
+  <!-- wordmark -->
+  <text class="word" x="128" y="78">Mega</text>
+</svg>

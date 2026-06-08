@@ -246,7 +246,7 @@ export class DashboardService {
       startOfTodayUtc.getTime() - (days - 1) * 24 * 60 * 60 * 1000,
     );
 
-    const [uploads, active, expired, downloadsAgg, downloadsPerDayRaw] =
+    const [uploads, active, expired, downloadsAgg, storageAgg, downloadsPerDayRaw] =
       await Promise.all([
         this.prisma.upload.count({ where: { userId, deletedAt: null } }),
         this.prisma.upload.count({
@@ -277,7 +277,11 @@ export class DashboardService {
         }),
         this.prisma.upload.aggregate({
           where: { userId, deletedAt: null },
-          _sum: { downloadCount: true, fileSize: true },
+          _sum: { downloadCount: true },
+        }),
+        this.prisma.upload.aggregate({
+          where: { userId, deletedAt: null, storagePurgedAt: null },
+          _sum: { fileSize: true },
         }),
         this.prisma.$queryRaw<{ date: string; count: bigint }[]>`
           SELECT to_char(date_trunc('day', d."createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
@@ -300,7 +304,7 @@ export class DashboardService {
       activeUploads: active,
       expiredUploads: expired,
       totalDownloads: downloadsAgg._sum.downloadCount ?? 0,
-      storageUsedBytes: downloadsAgg._sum.fileSize ?? 0,
+      storageUsedBytes: storageAgg._sum.fileSize ?? 0,
       storageQuotaBytes: quotaGb * 1024 * 1024 * 1024,
       downloadsPerDay,
     };

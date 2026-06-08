@@ -72,7 +72,7 @@ export class AdminService {
         where: { deletedAt: null, userId: null },
       }),
       this.prisma.upload.aggregate({
-        where: { deletedAt: null },
+        where: { deletedAt: null, storagePurgedAt: null },
         _sum: { fileSize: true },
       }),
       this.prisma.upload.aggregate({
@@ -140,10 +140,13 @@ export class AdminService {
     const poolStats = this.prisma.poolStats();
     const [cleanupQueueSize, storageAgg] = await Promise.all([
       this.prisma.upload.count({
-        where: { deletedAt: null, expiresAt: { lte: now } },
+        where: {
+          storagePurgedAt: null,
+          OR: [{ expiresAt: { lte: now } }, { deletedAt: { not: null } }],
+        },
       }),
       this.prisma.upload.aggregate({
-        where: { deletedAt: null },
+        where: { deletedAt: null, storagePurgedAt: null },
         _sum: { fileSize: true },
       }),
     ]);

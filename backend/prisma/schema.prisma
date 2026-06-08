@@ -69,6 +69,10 @@ model Upload {
 
   expiresAt DateTime
   deletedAt DateTime?
+  // Set when the stored object has been freed for an expired upload while the
+  // metadata record is kept as history. `deletedAt` now means "removed by a
+  // user/admin"; expiry alone never sets it.
+  storagePurgedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

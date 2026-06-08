@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardPage.vue'), meta: { requiresAuth: true } },
   { path: '/dashboard/files/:id', name: 'dashboard-file', component: () => import('@/views/DashboardFilePage.vue'), props: true, meta: { requiresAuth: true } },
   { path: '/admin', name: 'admin', component: () => import('@/views/AdminPage.vue'), meta: { requiresAuth: true, requiresAdmin: true } },
+  { path: '/admin/files/:id', name: 'admin-file', component: () => import('@/views/DashboardFilePage.vue'), props: (route) => ({ id: route.params.id, admin: true }), meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundPage.vue') },
 ];
 

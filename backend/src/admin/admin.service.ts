@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 
@@ -225,6 +225,38 @@ export class AdminService {
       total,
       page,
       totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  async uploadDetail(id: string) {
+    const upload = await this.prisma.upload.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        user: { select: { email: true } },
+        downloads: { orderBy: { createdAt: 'desc' }, take: 100 },
+      },
+    });
+    if (!upload) throw new NotFoundException('Upload not found');
+    return {
+      id: upload.id,
+      slug: upload.slug,
+      fileName: upload.fileName,
+      fileSize: upload.fileSize,
+      mimeType: upload.mimeType,
+      downloadCount: upload.downloadCount,
+      downloadLimit: upload.downloadLimit,
+      expiresAt: upload.expiresAt,
+      isExpired: upload.expiresAt.getTime() <= Date.now(),
+      hasPassword: !!upload.passwordHash,
+      createdAt: upload.createdAt,
+      checksum: upload.checksum,
+      uploaderEmail: upload.user?.email ?? null,
+      downloads: upload.downloads.map((d) => ({
+        id: d.id,
+        ip: d.ip,
+        userAgent: d.userAgent,
+        createdAt: d.createdAt,
+      })),
     };
   }
 

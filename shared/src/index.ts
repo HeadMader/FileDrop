@@ -157,6 +157,10 @@ export interface AdminUploadItem extends UploadItem {
   uploaderEmail: string | null;
 }
 
+export interface AdminUploadDetail extends UploadDetail {
+  uploaderEmail: string | null;
+}
+
 export interface LoginBody {
   email: string;
   password: string;

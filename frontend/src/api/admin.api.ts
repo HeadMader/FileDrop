@@ -1,4 +1,5 @@
 import type {
+  AdminUploadDetail,
   AdminUploadItem,
   AdminUserItem,
   PaginatedResponse,
@@ -31,6 +32,8 @@ export const adminApi = {
       anonymous: params.anonymous,
       sort: toFileApiSort(params.sort),
     }),
+
+  getFile: (id: string) => api.get<AdminUploadDetail>(`/admin/uploads/${id}`),
 
   deleteFile: (id: string) => api.del<void>(`/admin/uploads/${id}`),
 

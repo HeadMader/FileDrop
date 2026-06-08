@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import type { AdminUploadItem, DailyCount } from '@filedrop/shared';
 import { useAdminStore } from '@/stores/admin.store';
 import { useToastStore } from '@/stores/toast.store';
@@ -22,6 +23,7 @@ import Spinner from '@/components/ui/Spinner.vue';
 
 const store = useAdminStore();
 const toast = useToastStore();
+const router = useRouter();
 const { copy } = useClipboard();
 
 type Tab = 'overview' | 'files' | 'users';
@@ -362,7 +364,12 @@ function copyFileLink(slug: string) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="f in store.files" :key="f.id">
+            <tr
+              v-for="f in store.files"
+              :key="f.id"
+              style="cursor: pointer"
+              @click="router.push(`/admin/files/${f.id}`)"
+            >
               <td>
                 <div class="row" style="gap: 10px">
                   <FileTypeIcon :mime-type="f.mimeType" :size="16" />
@@ -394,7 +401,7 @@ function copyFileLink(slug: string) {
                 <Badge v-if="f.hasPassword" tone="warning" dot style="margin-left: 4px; height: 18px; font-size: 10px">pwd</Badge>
               </td>
               <td class="subtle" style="font-size: 12px">{{ formatDate(f.createdAt) }}</td>
-              <td>
+              <td @click.stop>
                 <div class="row" style="gap: 2px; justify-content: flex-end">
                   <IconButton icon="copy" :icon-size="12" label="Copy link" @click="copyFileLink(f.slug)" />
                   <IconButton icon="trash" :icon-size="12" label="Force-delete" @click="deleteTarget = f" />
@@ -480,8 +487,9 @@ function copyFileLink(slug: string) {
           </tbody>
         </table>
 
-        <div class="subtle" style="padding: 12px 14px; border-top: 1px solid var(--border); font-size: 12px">
-          <span class="mono">{{ store.usersTotal }}</span> users
+        <div class="row-between" style="padding: 12px 14px; border-top: 1px solid var(--border)">
+          <div class="subtle" style="font-size: 12px"><span class="mono">{{ store.usersTotal }}</span> users</div>
+          <Pagination :page="store.usersPage" :total-pages="store.usersTotalPages" @change="onUsersPage" />
         </div>
       </Card>
     </div>

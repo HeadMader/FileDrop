@@ -66,6 +66,11 @@ export class AdminController {
     });
   }
 
+  @Get('uploads/:id')
+  uploadDetail(@Param('id') id: string) {
+    return this.admin.uploadDetail(id);
+  }
+
   @Delete('uploads/:id')
   @UseGuards(CsrfGuard)
   removeUpload(@Param('id') id: string) {

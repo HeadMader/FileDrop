@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { ExpiresIn, UpdateUploadBody, UploadDetail } from '@filedrop/shared';
 import { USER_EXPIRES_IN } from '@filedrop/shared';
 import { uploadsApi } from '@/api/uploads.api';
+import { adminApi } from '@/api/admin.api';
 import { useToastStore } from '@/stores/toast.store';
 import { useClipboard, useCountdown } from '@/composables/useUtils';
 import { formatBytes, formatDate, formatDateTime, formatRelative } from '@/utils/format';
@@ -21,13 +22,16 @@ import Spinner from '@/components/ui/Spinner.vue';
 import Modal from '@/components/ui/Modal.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 
+const props = defineProps<{ id?: string; admin?: boolean }>();
+
 const route = useRoute();
 const router = useRouter();
 const toast = useToastStore();
 const { copy, copied } = useClipboard();
 
-const id = route.params.id as string;
-const detail = ref<UploadDetail | null>(null);
+const isAdmin = computed(() => !!props.admin);
+const fileId = (props.id ?? (route.params.id as string)) as string;
+const detail = ref<(UploadDetail & { uploaderEmail?: string | null }) | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
 const countdown = useCountdown(() => detail.value?.expiresAt ?? null);
@@ -43,7 +47,9 @@ async function load() {
   loading.value = true;
   notFound.value = false;
   try {
-    detail.value = await uploadsApi.getDetail(id);
+    detail.value = isAdmin.value
+      ? await adminApi.getFile(fileId)
+      : await uploadsApi.getDetail(fileId);
   } catch (e) {
     if ((e as { status?: number }).status === 404) notFound.value = true;
     else toast.push({ type: 'error', message: (e as Error).message });
@@ -63,9 +69,10 @@ const deleteOpen = ref(false);
 async function doDelete() {
   if (!detail.value) return;
   try {
-    await uploadsApi.remove(detail.value.id);
-    toast.push({ type: 'success', message: 'File deleted' });
-    router.push('/dashboard');
+    if (isAdmin.value) await adminApi.deleteFile(detail.value.id);
+    else await uploadsApi.remove(detail.value.id);
+    toast.push({ type: 'success', message: isAdmin.value ? 'File force-deleted' : 'File deleted' });
+    router.push(isAdmin.value ? '/admin' : '/dashboard');
   } catch (e) {
     toast.push({ type: 'error', message: (e as Error).message });
   }
@@ -127,12 +134,12 @@ async function saveEdit() {
 <template>
   <div class="container container-wide" style="padding: 32px 24px">
     <a
-      href="/dashboard"
+      :href="isAdmin ? '/admin' : '/dashboard'"
       class="row subtle"
       style="gap: 6px; font-size: 13px; width: fit-content; margin-bottom: 20px"
-      @click.prevent="router.push('/dashboard')"
+      @click.prevent="router.push(isAdmin ? '/admin' : '/dashboard')"
     >
-      <Icon name="arrow-l" :size="13" /> Back to files
+      <Icon name="arrow-l" :size="13" /> {{ isAdmin ? 'Back to admin' : 'Back to files' }}
     </a>
 
     <div v-if="loading" style="padding: 48px; display: flex; justify-content: center">
@@ -143,10 +150,12 @@ async function saveEdit() {
       <EmptyState
         icon="file"
         title="File not found"
-        message="It may have been deleted, or it isn’t one of your uploads."
+        message="It may have been deleted."
       >
         <template #action>
-          <Button variant="secondary" size="sm" @click="router.push('/dashboard')">Back to files</Button>
+          <Button variant="secondary" size="sm" @click="router.push(isAdmin ? '/admin' : '/dashboard')">
+            {{ isAdmin ? 'Back to admin' : 'Back to files' }}
+          </Button>
         </template>
       </EmptyState>
     </Card>
@@ -181,13 +190,13 @@ async function saveEdit() {
           </div>
         </div>
         <div class="row" style="gap: 6px">
-          <Button variant="secondary" @click="openEdit">
+          <Button v-if="!isAdmin" variant="secondary" @click="openEdit">
             <template #icon><Icon name="edit" :size="13" /></template>
             Edit
           </Button>
           <Button variant="danger" @click="deleteOpen = true">
             <template #icon><Icon name="trash" :size="13" /></template>
-            Delete
+            {{ isAdmin ? 'Force-delete' : 'Delete' }}
           </Button>
         </div>
       </div>
@@ -267,6 +276,13 @@ async function saveEdit() {
           <div class="info-row">
             <span class="info-key">File name</span>
             <span class="mono ellipsis info-val">{{ detail.fileName }}</span>
+          </div>
+          <div v-if="isAdmin" class="info-row" style="border-top: 1px solid var(--border)">
+            <span class="info-key">Uploader</span>
+            <span class="info-val">
+              <span v-if="detail.uploaderEmail" class="mono">{{ detail.uploaderEmail }}</span>
+              <Badge v-else tone="default"><Icon name="globe" :size="10" /> Anonymous</Badge>
+            </span>
           </div>
           <div class="info-row" style="border-top: 1px solid var(--border)">
             <span class="info-key">Size</span>
@@ -403,13 +419,15 @@ async function saveEdit() {
     <ConfirmDialog
       :open="deleteOpen"
       variant="danger"
-      title="Delete this file?"
+      :title="isAdmin ? 'Force-delete file?' : 'Delete this file?'"
       :message="
         detail
-          ? `“${detail.fileName}” will be permanently deleted and the share link will stop working immediately. This cannot be undone.`
+          ? isAdmin
+            ? `“${detail.fileName}” will be permanently deleted and the share link will stop working immediately. This action is logged in the admin audit trail.`
+            : `“${detail.fileName}” will be permanently deleted and the share link will stop working immediately. This cannot be undone.`
           : ''
       "
-      confirm-label="Delete file"
+      :confirm-label="isAdmin ? 'Force-delete' : 'Delete file'"
       @close="deleteOpen = false"
       @confirm="doDelete"
     />

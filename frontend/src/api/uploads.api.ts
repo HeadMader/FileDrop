@@ -30,12 +30,14 @@ export const uploadsApi = {
 
   getMeta: (slug: string) => api.get<FileMetadata>(`/uploads/${slug}`),
 
-  getDetail: (id: string) => api.get<UploadDetail>(`/uploads/${id}`),
+  // Owner-scoped detail/update/delete live under the dashboard controller
+  // (`/dashboard/uploads/:id`), not the public `/uploads/:slug` resource.
+  getDetail: (id: string) => api.get<UploadDetail>(`/dashboard/uploads/${id}`),
 
   update: (id: string, body: UpdateUploadBody) =>
-    api.patch<UploadDetail>(`/uploads/${id}`, body),
+    api.patch<UploadDetail>(`/dashboard/uploads/${id}`, body),
 
-  remove: (id: string) => api.del<void>(`/uploads/${id}`),
+  remove: (id: string) => api.del<void>(`/dashboard/uploads/${id}`),
 
   verifyPassword: (slug: string, body: VerifyPasswordBody) =>
     api.post<VerifyPasswordResponse>(`/uploads/${slug}/verify-password`, body),
